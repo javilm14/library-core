@@ -1,10 +1,22 @@
 #!/usr/bin/env node
 var debug = require('debug')('library-core');
+var fs = require('fs');
+
+var conf_filename = '.env';
+readConf(conf_filename);
+
 var app = require('../app');
 
-app.set('port', process.env.PORT || 3000);
+app.set('port', process.env.WEB_PORT || 8080);
 
 var server = app.listen(app.get('port'), function() {
   debug('Express server listening on port ' + server.address().port);
   console.log('Express server listening on port ' + server.address().port);
 });
+
+function readConf(file) {
+	var params = JSON.parse(fs.readFileSync(file));
+	for (i in params) {
+		process.env[i] = params[i];
+	}
+}

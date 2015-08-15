@@ -1,13 +1,10 @@
 var models = require('../models/models.js');
 var fs = require("fs");
 
-var path = require('path');
-var mime = require('mime');
-
-var ls = require('node-ls');
 var AdmZip = require('adm-zip');
+var exec = require('sync-exec');
 
-var library_path = 'E:\\My Box Files\\Calibre\\';
+var library_path = process.env.LIBRARY_PATH;
 
 // Autoload - factoriza el código si ruta incluye :bookId
 exports.load = function(req, res, next, bookId) {
@@ -17,37 +14,22 @@ exports.load = function(req, res, next, bookId) {
 		where: { id: Number(bookId) }
 	}).then(function(book) {
 			if (book) {
+				var format = req.query.format || '';
+
 				var url = getCover(book);
+				console.log('#### var url = getCover(book); --> ' + url);
 				var sinopsis = getSinopsis(book);
-				var formats = getFormats(book);
+				//var formats = getFormats(book);
+				var formats = process.env.FORMATS_LIST.split(',');
 
 				book['dataValues']['image_url'] = url;
 				book['dataValues']['sinopsis'] = sinopsis;
 				book['dataValues']['formats'] = formats;
+				if (format.length > 0) {
+					book['dataValues']['url'] = getLink(book, format);
+				}
 				req.book = book;
 
-				var format = req.query.format || '';
-				if (format.length > 0) {
-					var book_path = library_path + book['path'].replace('/', '\\') + '\\';
-					var files = fs.readdirSync(book_path);
-
-					for (var i = 0; i < files.length; i++) {
-						if (files[i].split('.').pop().indexOf(format) > -1) {
-							// files[i] es el fichero a descargar
-							console.log('####  Preparando libro para descargar...');
-							var file = book_path + files[i];
-							var newFile = 'books/' + bookId + '.' + format;
-							console.log('####  file: ' + file);
-							console.log('####  newFile: ' + 'public/' + newFile);
-							//fs.createReadStream(file).pipe(fs.createWriteStream(newFile));
-		  				var buf = fs.readFileSync(file);
-							console.log('####  1');
-							fs.writeFileSync('public/' + newFile, buf);
-							console.log('####  2');
-							req.book['dataValues']['url'] = '/' + newFile;
-						}
-					};
-				}
 				next();
 			} else { next(new Error('No existe bookId=' + bookId));}
 		}
@@ -80,7 +62,7 @@ exports.show = function(req, res) {
 
 // Funciones de utilidades
 function getCover(book) {
-	var book_path = library_path + book['path'].replace('/', '\\') + '\\';
+	var book_path = library_path + book['path'] + '/';
 	var image_path = 'images/covers/';
 	var image_file = image_path + book['id'] + '.jpg';
 	var cover_path = 'OEBPS/Images/cover.jpg';
@@ -93,6 +75,7 @@ function getCover(book) {
 		return image_file;
 	}
 
+	console.log('    --> book_path: ' + book_path);
 	var files = fs.readdirSync(book_path);
 
 	// La imagen se encuentra en el directorio?
@@ -118,18 +101,18 @@ function getCover(book) {
 			console.log('    --> book_path + files[i]: ' + book_path + files[i]);
     	var zip = new AdmZip(book_path + files[i]);
     	var zipEntries = zip.getEntries(); // an array of ZipEntry records 
- 	  	zipEntries.forEach(function(zipEntry) {
- 	  		var aux = zipEntry['entryName'].toString();
+ 	  	for (var j = 0; j < zipEntries.length; j++) {
+ 	  		var aux = zipEntries[j]['entryName'].toString();
  	  		console.log('    --> aux: ' + aux);
     	  if (aux.toLowerCase().indexOf(cover_path.toLowerCase()) > -1) {
 					console.log('    --> antes de extraer');
 					zip.extractEntryTo(aux, image_path, false, true);
-					fs.rename(image_path + 'cover.jpg', 'public/' + image_file, function (err) {
-					  if (err) throw err;
-						console.log('    --> image_file: ' + image_file);
-					});
+					fs.renameSync(image_path + 'cover.jpg', 'public/' + image_file);
+					console.log('    --> #### Extraido y movido');
+					console.log('    --> image_file: ' + image_file);
+  				return image_file;
     	  }
-    	});
+    	}
 		}
 	};
 
@@ -137,7 +120,7 @@ function getCover(book) {
 }
 
 function getSinopsis(book) {
-	var book_path = library_path + book['path'].replace('/', '\\') + '\\';
+	var book_path = library_path + book['path'] + '/';
 	var sinopsis_path = 'OEBPS/Text/sinopsis.xhtml';
 
 	var files = fs.readdirSync(book_path);
@@ -145,6 +128,7 @@ function getSinopsis(book) {
 	console.log('    --> files.length: ' + files.length);
 
 	// Extraemos el documento xhtml a la ruta temporal
+	// TODO modificar zipEntries para que sea síncrono (cambiar por un 'for')
 	for (var i = 0; i < files.length; i++) {
 		if (files[i].indexOf('.epub') > -1) {	
   		var zip = new AdmZip(book_path + files[i]);
@@ -174,17 +158,104 @@ function getSinopsis(book) {
 	return aux;
 }
 
-function getFormats(book) {
-	var book_path = library_path + book['path'].replace('/', '\\') + '\\';
+function getLink(book, format) {
 
-	var files = fs.readdirSync(book_path);
-	var formats = [];
+	if (format.length < 1) {
+		return undefined;
+	}
 
-	for (var i = 0; i < files.length; i++) {
-		if ( files[i].indexOf('.jpg') === -1 && files[i].indexOf('.opf') === -1 )	{
-			formats.push(files[i].split('.').pop())
+	console.log('**** FORMAT 1');
+	if (format.length > 0) {
+		var book_path = library_path + book['path'] + '/';
+
+		var index_format = -1;
+		var epubBook = null;
+
+		var formats = process.env.FORMATS_LIST.split(',');
+
+		for (var i = 0; i < formats.length; i++) {
+			if (formats[i].toLowerCase().
+								indexOf(format.toLowerCase()) > -1) {
+				index_format = i;
+				break;
+			}
+		};
+
+		console.log('**** FORMAT 2');
+
+		if (index_format > -1) {
+			// El formato enviado efectivamente 
+			// es un formato válido de la lista
+			var newFile = 'books/' + book.id + '.'
+				+ formats[index_format].toLowerCase();
+
+			if (fs.existsSync('public/' + newFile)) {
+
+				// El libro ya está preparado
+				return '/' + newFile;
+				console.log('**** FORMAT 3');
+
+			} else {
+
+				// Buscamos el formato en los archivos del
+				// directorio del libro
+				console.log('**** FORMAT 4');
+				var files = fs.readdirSync(book_path);
+				for (var i = 0; i < files.length; i++) {
+					if (files[i].split('.').pop().
+						toLowerCase().indexOf(format.toLowerCase()) > -1) {
+
+						// El libro se encuentra en el formato pedido,
+						// sólo hay que copiarlo a la ruta /books
+						var buf = fs.readFileSync(book_path + files[i]);
+						console.log('####  1');
+						fs.writeFileSync('public/' + newFile, buf);
+						console.log('####  2');
+						return '/' + newFile;
+					}
+					if (files[i].split('.').pop().
+						toLowerCase().indexOf("epub".toLowerCase()) > -1) {
+						epubBook = book_path + files[i];
+					}
+				};
+
+				// La url no ha sido hallada en el libro,
+				// por lo tanto hay que convertirlo y luego
+
+				if (epubBook) {
+
+					var cmd = '\"' + process.env.EBOOK_CONVERT + '\" \"' + 
+										epubBook + '\" \"public/' + newFile + '\"';
+					console.log('cmd: ' + cmd);
+					try {
+						console.log(exec(cmd));
+					} catch (err) {
+							if (fs.existsSync('public/' + newFile)) {
+							return '/' + newFile;
+						}
+					}
+
+					return '/' + newFile;
+				}
+				
+			}
 		}
-	};
-
-	return formats;
+	}
 }
+
+//function getFormats(book) {
+//	var book_path = library_path + book['path'] + '/';
+//
+//	var files = fs.readdirSync(book_path);
+//	var formats = [];
+//
+//	for (var i = 0; i < files.length; i++) {
+//		if ( files[i].indexOf('.jpg') === -1 
+//			&& files[i].indexOf('.opf') === -1 
+//			&& files[i].indexOf('.db') === -1 )	{
+//			formats.push(files[i].split('.').pop())
+//		}
+//	};
+//
+//	return formats;
+//}

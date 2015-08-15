@@ -3,35 +3,42 @@ var fs = require("fs");
 
 var AdmZip = require('adm-zip');
 var exec = require('sync-exec');
+//require('shelljs/global');
 
 var library_path = process.env.LIBRARY_PATH;
 
 // Autoload - factoriza el código si ruta incluye :bookId
 exports.load = function(req, res, next, bookId) {
 
-	console.log('    --> bookLoad');
+	console.log('    --> BookController: Resolviendo load()...');
 	models.books.find({
 		where: { id: Number(bookId) }
 	}).then(function(book) {
 			if (book) {
 				var format = req.query.format || '';
 
-				var url = getCover(book);
-				console.log('#### var url = getCover(book); --> ' + url);
-				var sinopsis = getSinopsis(book);
-				//var formats = getFormats(book);
-				var formats = process.env.FORMATS_LIST.split(',');
+				var formats = process.env.FORMATS_LIST;
 
-				book['dataValues']['image_url'] = url;
+				var image_url = getCover(book);
+				var sinopsis = getSinopsis(book);
+				var formats_list = formats.split(',');
+
+				book['dataValues']['image_url'] = image_url;
 				book['dataValues']['sinopsis'] = sinopsis;
-				book['dataValues']['formats'] = formats;
+				book['dataValues']['formats'] = formats_list;
 				if (format.length > 0) {
-					book['dataValues']['url'] = getLink(book, format);
+					var link = getLink(book, format)
+					if (link.length > 0) {
+						book['dataValues']['url'] = link;
+					}
 				}
 				req.book = book;
-
+				console.log('    --> BookController: Resolviendo load()...OK');
 				next();
-			} else { next(new Error('No existe bookId=' + bookId));}
+			} else { 
+				console.log('    --> BookController: Resolviendo load()...FAIL');
+				next(new Error('No existe bookId=' + bookId));
+			}
 		}
 	).catch(function(error) { next(error);});
 };
@@ -62,70 +69,58 @@ exports.show = function(req, res) {
 
 // Funciones de utilidades
 function getCover(book) {
+	console.log('Obteniendo portada...');
 	var book_path = library_path + book['path'] + '/';
 	var image_path = 'images/covers/';
 	var image_file = image_path + book['id'] + '.jpg';
 	var cover_path = 'OEBPS/Images/cover.jpg';
-	console.log('    --> Se busca la portada');
 
 	// La portada se enceuntra preparada?
-	console.log('    --> image_file: ' + image_file);
-	console.log('    --> fs.existsSync(image_file): ' + fs.existsSync(image_file));
 	if (fs.existsSync('public/' + image_file)) {
+		console.log('Obteniendo portada...OK');
 		return image_file;
 	}
 
-	console.log('    --> book_path: ' + book_path);
 	var files = fs.readdirSync(book_path);
 
 	// La imagen se encuentra en el directorio?
-	console.log('    --> Buscando la portada en el directorio del libro...');
-	console.log('    --> files: ' + files);
 	
 	for (var i = 0; i < files.length; i++) {
 	  if (files[i].indexOf('cover.jpg') > -1) {
-	  	console.log('    --> Portada en ruta');
 		  var buf = fs.readFileSync(book_path + 'cover.jpg');
 			fs.writeFileSync('public/' + image_file, buf);
+			console.log('Obteniendo portada...OK');
 			return image_file;
 		}
 	};
 
 	// Se busca la imagen en el libro
-	console.log('    --> Portada en libro');
-	console.log('    --> files: ' + files);
 	for (var i = 0; i < files.length; i++) {
-		console.log('    --> Dentro del for');
 		if (files[i].indexOf('.epub') > -1) {
-			console.log('    --> Se encontro el libro (.epub)');
-			console.log('    --> book_path + files[i]: ' + book_path + files[i]);
     	var zip = new AdmZip(book_path + files[i]);
     	var zipEntries = zip.getEntries(); // an array of ZipEntry records 
  	  	for (var j = 0; j < zipEntries.length; j++) {
  	  		var aux = zipEntries[j]['entryName'].toString();
- 	  		console.log('    --> aux: ' + aux);
     	  if (aux.toLowerCase().indexOf(cover_path.toLowerCase()) > -1) {
-					console.log('    --> antes de extraer');
 					zip.extractEntryTo(aux, image_path, false, true);
 					fs.renameSync(image_path + 'cover.jpg', 'public/' + image_file);
-					console.log('    --> #### Extraido y movido');
-					console.log('    --> image_file: ' + image_file);
+					console.log('Obteniendo portada...OK');
   				return image_file;
     	  }
     	}
 		}
 	};
 
+	console.log('Obteniendo portada...FAIL');
   return null;
 }
 
 function getSinopsis(book) {
+	console.log('Obteniendo sinopsis...');
 	var book_path = library_path + book['path'] + '/';
 	var sinopsis_path = 'OEBPS/Text/sinopsis.xhtml';
 
 	var files = fs.readdirSync(book_path);
-	console.log('    --> files: ' + files);
-	console.log('    --> files.length: ' + files.length);
 
 	// Extraemos el documento xhtml a la ruta temporal
 	// TODO modificar zipEntries para que sea síncrono (cambiar por un 'for')
@@ -144,27 +139,27 @@ function getSinopsis(book) {
 
 	// Si se extrajo correctamente, se lee y se envía sólo el texto
 	if (!fs.existsSync('tmp/sinopsis.xhtml')) {
+		console.log('Obteniendo sinopsis...FAIL');
 		return null;
 	}
 	var page = fs.readFileSync('tmp/sinopsis.xhtml').toString();
 	var index = page.indexOf('<body>') + '<body>'.length;
-	console.log('    --> page.length: ' + page.length);
-	console.log('    --> index: ' + index);
 	var aux = page.substring(index);
 	aux = aux.replace('</body>', '').replace('</html>', '');
-	//console.log('    --> aux: ' + aux);
 	
 	fs.unlinkSync('tmp/sinopsis.xhtml');
+	console.log('Obteniendo sinopsis...OK');
 	return aux;
 }
 
 function getLink(book, format) {
+	console.log('Obteniendo enlace de descarga...');
 
 	if (format.length < 1) {
+		console.log('Obteniendo enlace de descarga...FAIL');
 		return undefined;
 	}
 
-	console.log('**** FORMAT 1');
 	if (format.length > 0) {
 		var book_path = library_path + book['path'] + '/';
 
@@ -181,7 +176,6 @@ function getLink(book, format) {
 			}
 		};
 
-		console.log('**** FORMAT 2');
 
 		if (index_format > -1) {
 			// El formato enviado efectivamente 
@@ -192,14 +186,13 @@ function getLink(book, format) {
 			if (fs.existsSync('public/' + newFile)) {
 
 				// El libro ya está preparado
+				console.log('Obteniendo enlace de descarga...OK');
 				return '/' + newFile;
-				console.log('**** FORMAT 3');
 
 			} else {
 
 				// Buscamos el formato en los archivos del
 				// directorio del libro
-				console.log('**** FORMAT 4');
 				var files = fs.readdirSync(book_path);
 				for (var i = 0; i < files.length; i++) {
 					if (files[i].split('.').pop().
@@ -208,9 +201,8 @@ function getLink(book, format) {
 						// El libro se encuentra en el formato pedido,
 						// sólo hay que copiarlo a la ruta /books
 						var buf = fs.readFileSync(book_path + files[i]);
-						console.log('####  1');
 						fs.writeFileSync('public/' + newFile, buf);
-						console.log('####  2');
+						console.log('Obteniendo enlace de descarga...OK');
 						return '/' + newFile;
 					}
 					if (files[i].split('.').pop().
@@ -228,13 +220,19 @@ function getLink(book, format) {
 										epubBook + '\" \"public/' + newFile + '\"';
 					console.log('cmd: ' + cmd);
 					try {
-						console.log(exec(cmd));
+						var exec_print = exec(cmd);
+						console.log(exec_print);
 					} catch (err) {
-							if (fs.existsSync('public/' + newFile)) {
+						if (fs.existsSync('public/' + newFile)) {
+							console.log('Obteniendo enlace de descarga...OK');
 							return '/' + newFile;
+						} else {
+							console.log('Obteniendo enlace de descarga...FAIL');
+							return undefined;
 						}
 					}
 
+					console.log('Obteniendo enlace de descarga...OK');
 					return '/' + newFile;
 				}
 				
@@ -242,20 +240,3 @@ function getLink(book, format) {
 		}
 	}
 }
-
-//function getFormats(book) {
-//	var book_path = library_path + book['path'] + '/';
-//
-//	var files = fs.readdirSync(book_path);
-//	var formats = [];
-//
-//	for (var i = 0; i < files.length; i++) {
-//		if ( files[i].indexOf('.jpg') === -1 
-//			&& files[i].indexOf('.opf') === -1 
-//			&& files[i].indexOf('.db') === -1 )	{
-//			formats.push(files[i].split('.').pop())
-//		}
-//	};
-//
-//	return formats;
-//}

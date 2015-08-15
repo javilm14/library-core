@@ -7,7 +7,7 @@ readConf(conf_filename);
 
 var app = require('../app');
 
-app.set('port', process.env.WEB_PORT || 8080);
+app.set('port', process.env.WEB_PORT);
 
 var server = app.listen(app.get('port'), function() {
   debug('Express server listening on port ' + server.address().port);
@@ -19,4 +19,54 @@ function readConf(file) {
 	for (i in params) {
 		process.env[i] = params[i];
 	}
+
+	console.log('#######################################\n' +  
+		'##### PARAMETROS DE CONFIGURACION #####\n' +  
+		'#######################################\n');
+
+	// Se obtiene la dirección IP y el puerto del servicio core y
+	// el puerto del servicio web. Por defecto:
+	//	Core: localhost:8080
+	//	Web: 8080
+	process.env.WEB_PORT = process.env.WEB_PORT || 8080;
+	process.env.CORE_PORT = process.env.CORE_PORT || process.env.WEB_PORT;
+	process.env.CORE_ADDRESS = process.env.CORE_ADDRESS || 'localhost';
+	console.log('\nPuerto del servicio web: ' + process.env.WEB_PORT);
+	// TODO Cambiar 'http' si se convierte en servidor seguro por 'https'
+	console.log('URL del servicio core: http:'
+	 + process.env.CORE_ADDRESS + ':' + process.env.CORE_PORT);
+
+	// Se obtiene la ruta de la biblioteca,
+	// si no se encuentra en la configuración
+	// se muestra mensaje y se utiliza la ruta del servicio
+	process.env.LIBRARY_PATH = process.env.LIBRARY_PATH || '';
+	if (process.env.LIBRARY_PATH.length == 0) {
+		console.log('\nWARNING: No se ha encontrado la ruta de la biblioteca.\n'
+		 + 'Se utilizará la ruta del servicio como ruta de biblioteca.');
+	} else {
+		console.log('\nRuta de la biblioteca:\n\t'
+		 + process.env.LIBRARY_PATH);
+	}
+
+	// Se obtiene la lista de formatos en los que se puede descargar un libro,
+	// si no se encuentra en la configuración, se pueden descargar en 
+	// *.epub y *.mobi por defecto
+	var formats_list = process.env.FORMATS_LIST || 'epub,mobi';
+	process.env.FORMATS_LIST = formats_list.split(',');
+	console.log('\nLista de formatos disponibles:\n\t'
+	 + process.env.FORMATS_LIST);
+
+	// Se obtiene la ruta del proceso para convertir libros,
+	// si no se encuentra, no estará disponible esta opción
+	if (!process.env.EBOOK_CONVERT) {
+		console.log('\nWARNING: No se ha encontrado la ruta del proceso para '
+		 + 'convertir libros.\nEsta opción no estará disponible.');
+	} else {
+		console.log('\nRuta del proceso para convertir libros:\n\t'
+		 + process.env.EBOOK_CONVERT);
+	}
+
+	console.log(
+		'\n#######################################\n' + 
+		'#######################################\n\n');
 }

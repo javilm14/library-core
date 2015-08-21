@@ -29,20 +29,81 @@ var sequelize = new Sequelize(DB_name, user, pwd,
 );
 
 // Importar la definición de la tabla books en books.js
+console.log('Inicializando base de datos de libros...')
 var books = sequelize.import(path.join(__dirname,'books'));
-
-// Importar la definición de la tabla Comment
-//var Comment = sequelize.import(path.join(__dirname,'comment'));
-
-//Comment.belongsTo(Quiz);
-//Quiz.hasMany(Comment);
-
-exports.books = books; // exportar definición de tabla Quiz
-//exports.Comment = Comment;
-// sequelize.sync() crea e inicializa tabla de preguntas en DB
+exports.books = books;
 sequelize.sync().then(function() {
-  // then(..) ejecuta el manejador una vez creada la tabla
-	books.count().then(function (count) {
-		console.log('Base de datos inicializada: ' + count + ' libros.');
-	});
+  books.count().then(function (count) {
+    console.log('Base de datos inicializada: ' + count + ' libros.');
+  });
+});
+
+// Importar la definición de la tabla authors en authors.js
+console.log('Inicializando base de datos de autores...')
+var authors = sequelize.import(path.join(__dirname,'authors'));
+exports.authors = authors;
+sequelize.sync().then(function() {
+  authors.count().then(function (count) {
+    console.log('Base de datos inicializada: ' + count + ' autores.');
+  });
+});
+
+// Importar la definición de la tabla series en series.js
+console.log('Inicializando base de datos de series...')
+var series = sequelize.import(path.join(__dirname,'series'));
+exports.series = series;
+sequelize.sync().then(function() {
+  series.count().then(function (count) {
+    console.log('Base de datos inicializada: ' + count + ' series.');
+  });
+});
+
+// Importar la definición de la tabla data en data.js
+console.log('Inicializando base de datos de data...')
+var data = sequelize.import(path.join(__dirname,'data'));
+exports.data = data;
+sequelize.sync().then(function() {
+  data.count().then(function (count) {
+    console.log('Base de datos inicializada: ' + count + ' data.');
+  });
+});
+
+// Importar la definición de la tabla tags en tags.js
+console.log('Inicializando base de datos de etiquetas...')
+var tags = sequelize.import(path.join(__dirname,'tags'));
+exports.tags = tags;
+sequelize.sync().then(function() {
+  tags.count().then(function (count) {
+    console.log('Base de datos inicializada: ' + count + ' etiquetas.');
+  });
+});
+
+// Importar la definición de la tabla books_authors_link en books_authors_link.js
+console.log('Inicializando base de datos de relaciones entre libros y autores...')
+var books_authors_link = sequelize.import(path.join(__dirname,'books_authors_link'));
+exports.books_authors_link = books_authors_link;
+sequelize.sync().then(function() {
+  books_authors_link.count().then(function (count) {
+    console.log('Base de datos inicializada: ' + count + ' resultados.');
+  });
+});
+
+// Importar la definición de la tabla books_series_link en books_series_link.js
+console.log('Inicializando base de datos de relaciones entre libros y series...')
+var books_series_link = sequelize.import(path.join(__dirname,'books_series_link'));
+exports.books_series_link = books_series_link;
+sequelize.sync().then(function() {
+  books_series_link.count().then(function (count) {
+    console.log('Base de datos inicializada: ' + count + ' resultados.');
+  });
+});
+
+// Importar la definición de la tabla books_tags_link en books_tags_link.js
+console.log('Inicializando base de datos de relaciones entre libros y etiquetas...')
+var books_tags_link = sequelize.import(path.join(__dirname,'books_tags_link'));
+exports.books_tags_link = books_tags_link;
+sequelize.sync().then(function() {
+  books_tags_link.count().then(function (count) {
+    console.log('Base de datos inicializada: ' + count + ' resultados.');
+  });
 });

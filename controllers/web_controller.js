@@ -29,11 +29,20 @@ exports.load = function(req, res, next, webBookId) {
 // GET /web/books
 exports.index = function(req, res) {
 
-	var search = req.query.search || '';
+	var title = req.query.bookTitle || '';
+	var author = req.query.bookAuthor || '';
+	var serie = req.query.bookSerie || '';
+
 	var query = core_service + '/books/';
 
-	if (search.length > 0)
-		query = query.concat('?search=' + search);
+	if (title.length > 0)
+		query = query.concat('&bookTitle=' + title);
+	if (author.length > 0)
+		query = query.concat('&bookAuthor=' + author);
+	if (serie.length > 0)
+		query = query.concat('&bookSerie=' + serie);
+
+	query = query.replace('&', '?');
 
 	console.log('query: ' + query);
 

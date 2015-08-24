@@ -5,3 +5,4 @@ metadata.db
 .env
 books/
 covers/
+fallos.txt

@@ -33,8 +33,37 @@ exports.load = function(req, res, next, bookId) {
 					}
 				}
 				req.book = book;
+				
+				console.log('Obteniendo serie...');			
+				models.books_series_link
+				.findAll({ where: 
+					{book: 
+						{$like: book.id}
+					} 
+				})
+				.then(function(books_series_link) {
+					if (books_series_link.length > 0) {
+						models.series
+						.findAll({ where:
+							{id: 
+								{$like: books_series_link[0]['dataValues']['series']}
+							}
+						})
+						.then(function(series) {
+							console.log('Obteniendo serie...OK');
+							book['dataValues']['series'] = series[0]['dataValues']['name'];
+							next();
+						});
+					} else {
+						console.log('Obteniendo serie...OK');
+						book['dataValues']['series'] = '';
+						next();
+					}
+				}).catch(function(error) {
+					console.log('Obteniendo serie...FAIL');
+					next(error)
+				});
 				console.log('    --> BookController: Resolviendo load()...OK');
-				next();
 			} else { 
 				console.log('    --> BookController: Resolviendo load()...FAIL');
 				next(new Error('No existe bookId=' + bookId));
@@ -46,14 +75,101 @@ exports.load = function(req, res, next, bookId) {
 // GET /books
 exports.index = function(req, res) {
 
-	var search = req.query.search || '';
-	search = '%' + search.replace(new RegExp(' ', 'g'), '%') + '%';
-	models.books
-	.findAll({ where: ["title like ?", search], order: [['title', 'ASC']]})
-	.then(function(books) {
-		res.json(books);
+	// Variables for filter
+	var title = req.query.bookTitle || '';
+	var author = req.query.bookAuthor || '';
+	var serie = req.query.bookSerie || '';
+
+	console.log("title: " + title);
+	console.log("author: " + author);
+	console.log("serie: " + serie);
+
+	title = '%' + title.replace(new RegExp(' ', 'g'), '%') + '%';
+	author = '%' + author.replace(new RegExp(' ', 'g'), '%') + '%';
+	serie = '%' + serie.replace(new RegExp(' ', 'g'), '%') + '%';
+
+	// Filtrar por título, autor y serie
+
+	var authorResult = [];
+	var serieResult = [];
+	var authorResultIndex = [];
+	var serieResultIndex = [];
+	var results = [];
+
+	var finishAuthor = false;
+	var finishSerie = false;
+	var finishAuthorIndex = false;
+	var finishSerieIndex = false;
+
+	// Buscamos el autor
+	models.authors
+	.findAll({ where: ["name like ?", author] })
+	.then(function(authors) {
+		var result = [];
+		for (var i = 0; i < authors.length; i++) {
+			result.push(authors[i].id)
+		};
+
+		models.books_authors_link
+		.findAll({ where: 
+			{author: 
+				{$in: result}
+			} 
+		})
+		.then(function(books_authors_link) {
+			for (var i = 0; i < books_authors_link.length; i++) {
+				authorResult.push(books_authors_link[i].book);
+			};
+
+			models.series
+			.findAll({ where: ["name like ?", serie] })
+			.then(function(series) {
+				var result = [];
+				for (var i = 0; i < series.length; i++) {
+					result.push(series[i].id)
+				};
+		
+				models.books_series_link
+				.findAll({ where: 
+					{series: 
+						{$in: result}
+					} 
+				})
+				.then(function(books_series_link) {
+					for (var i = 0; i < books_series_link.length; i++) {
+						serieResult.push(books_series_link[i].book);
+					};
+
+					var result = [];
+
+					if (serie.length > 2) {
+						for (var i = 0; i < serieResult.length; i++) {
+							if (authorResult.indexOf(serieResult[i]) > -1) {
+								result.push(serieResult[i]);
+							}
+						};
+					} else {
+						result = authorResult;
+					}
+
+					models.books
+					.findAll({ where: 
+						{
+							id: {$in: result},
+							title: {$like: title},
+						},
+						order: [['id', 'ASC']]
+					})
+					.then(function(books) {
+						res.json(books);
+					});					
+		
+				});
+			});
+		});
 	});
 }
+
 
 // GET /books/:bookId(\\d+)
 exports.show = function(req, res) {
@@ -123,7 +239,6 @@ function getSinopsis(book) {
 	var files = fs.readdirSync(book_path);
 
 	// Extraemos el documento xhtml a la ruta temporal
-	// TODO modificar zipEntries para que sea síncrono (cambiar por un 'for')
 	for (var i = 0; i < files.length; i++) {
 		if (files[i].indexOf('.epub') > -1) {	
   		var zip = new AdmZip(book_path + files[i]);
